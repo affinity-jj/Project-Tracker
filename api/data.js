@@ -9,7 +9,9 @@ function clone(o) {
 }
 
 function storageReady() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  /* Legacy stores inject BLOB_READ_WRITE_TOKEN; OIDC-connected stores inject
+     BLOB_STORE_ID and the SDK authenticates via the runtime OIDC token. */
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
 }
 
 async function readData() {
