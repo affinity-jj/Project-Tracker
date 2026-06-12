@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Initiatives Portfolio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- ============ Lock screen ============ -->
+<div class="lock-wrap" id="lockScreen">
+  <div class="lock-card">
+    <div class="lock-eyebrow">Restricted Access</div>
+    <h1>AI Initiatives<br>Portfolio</h1>
+    <p>Enter your access password to continue.</p>
+    <input type="password" class="lock-input" id="lockInput" placeholder="Password" autocomplete="current-password">
+    <button class="lock-btn" id="lockBtn">Enter Dashboard</button>
+    <div class="lock-error" id="lockError"></div>
+  </div>
+</div>
+
+<!-- ============ App ============ -->
+<div id="app">
+  <header class="header">
+    <div>
+      <div class="header-eyebrow">Executive Portfolio Review</div>
+      <h1>AI Initiatives Portfolio</h1>
+      <div class="header-sub" id="lastUpdated"></div>
+    </div>
+    <div class="header-actions">
+      <span class="role-badge" id="roleBadge"><span class="dot"></span><span id="roleText"></span></span>
+      <button class="btn btn-ghost" id="refreshBtn" title="Reload latest saved data">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+        Refresh
+      </button>
+      <button class="btn btn-ghost" id="signOutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div id="storageBanner" class="banner banner-warn" style="display:none">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Blob storage is not connected — changes will not persist. In Vercel: Project &gt; Storage &gt; Create Blob store, connect it to this project, then redeploy.</span>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="filterbar" id="filterbar"></div>
+
+    <!-- Timeline -->
+    <section class="card" id="timelineCard">
+      <div class="card-head">
+        <div class="card-title">Timeline <span class="count" id="ganttCount"></span></div>
+        <div class="card-sub">Monthly through the current and next two quarters, quarterly beyond. Click any bar or row for details.</div>
+      </div>
+      <div class="gantt-scroll" id="ganttScroll"><div class="gantt" id="gantt"></div></div>
+      <div class="gantt-legend">
+        <span class="li"><span class="legend-today"></span> Today</span>
+        <span class="li"><span class="legend-ms"></span> Milestone (filled when complete)</span>
+        <span class="li" style="color:var(--c-hold)">Dashed chips below a swimlane are unscheduled — missing a start or end date.</span>
+      </div>
+    </section>
+
+    <!-- Project list -->
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title">Projects <span class="count" id="listCount"></span></div>
+        <div style="display:flex;gap:10px" id="listActions"></div>
+      </div>
+      <div id="projectList"></div>
+    </section>
+
+    <!-- Backlog -->
+    <section class="card backlog-card" id="backlogCard">
+      <div class="card-head" id="backlogHead">
+        <div class="card-title">
+          <svg class="backlog-chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          Backlog <span class="count" id="backlogCount"></span>
+        </div>
+        <div class="card-sub">Candidate initiatives, not yet committed. Excluded from the timeline.</div>
+      </div>
+      <div class="backlog-body" id="backlogBody"></div>
+    </section>
+  </div>
+</div>
+
+<!-- Slide-over detail panel -->
+<div class="panel-overlay" id="panelOverlay"></div>
+<aside class="panel" id="panel" aria-label="Project details"></aside>
+
+<!-- Save bar -->
+<div class="savebar" id="savebar">
+  <div class="savebar-msg"><b id="changeCount">0</b> unsaved change(s)<span class="savebar-sub">Changes are staged locally until you save.</span></div>
+  <button class="btn btn-sm" id="discardBtn">Discard</button>
+  <button class="btn btn-sm btn-gold" id="saveBtn">Save Changes</button>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle"></h3>
+    <p id="modalText" style="display:none"></p>
+    <input class="modal-input" id="modalInput" style="display:none">
+    <div class="modal-actions">
+      <button class="btn" id="modalCancel">Cancel</button>
+      <button class="btn btn-gold" id="modalOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"><span id="toastIcon"></span><span id="toastMsg"></span></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
