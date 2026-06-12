@@ -23,7 +23,7 @@ const ROLE_STORE = 'portfolioRole';
 const NAME_STORE = 'portfolioCommenterName';
 const MONTH_W = 86;     /* px per monthly column */
 const QUARTER_W = 112;  /* px per quarterly column */
-const LABEL_W = 235;    /* px sticky label column */
+const LABEL_W = 250;    /* px sticky label column */
 
 /* ---------------- state ---------------- */
 let session = { key: null, role: null };
@@ -176,7 +176,9 @@ async function loadData() {
   session.role = res.role || session.role;
   working = clone(serverData);
   changeCount = 0;
-  if (openCats.size === 0) (working.categories || []).forEach(c => openCats.add(c.id));
+  if (openCats.size === 0) (working.categories || []).forEach(c => {
+    if ((c.projects || []).some(p => p.status !== 'backlog')) openCats.add(c.id);
+  });
 }
 
 /* ---------------- change staging ---------------- */
@@ -269,14 +271,18 @@ function renderFilters() {
       '<option value="' + esc(c.id) + '"' + (deptFilter === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>'));
   $('filterbar').innerHTML =
     '<span class="filterbar-label">Status</span>' +
-    TIMELINE_STATUSES.map(s =>
-      '<button class="chip' + (statusFilter.has(s.key) ? ' chip-on' : '') + '" style="--cc:' + s.c + ';--cbg:' + s.bg + '" data-chip="' + s.key + '"><span class="dot"></span>' + s.label + '</button>'
-    ).join('') +
+    TIMELINE_STATUSES.map(s => {
+      const filtering = statusFilter.size < TIMELINE_STATUSES.length;
+      const on = filtering && statusFilter.has(s.key);
+      return '<button class="chip' + (on ? ' chip-on' : '') + '" style="--cc:' + s.c + ';--cbg:' + s.bg + '" data-chip="' + s.key + '"><span class="dot"></span>' + s.label + '</button>';
+    }).join('') +
     '<select class="dept-select" id="deptSelect">' + deptOpts.join('') + '</select>' +
     '<button class="filter-reset" id="filterReset">Reset filters</button>';
   $('filterbar').querySelectorAll('[data-chip]').forEach(el => el.addEventListener('click', () => {
     const k = el.dataset.chip;
-    if (statusFilter.has(k)) { statusFilter.delete(k); if (statusFilter.size === 0) statusFilter = new Set(TIMELINE_STATUSES.map(s => s.key)); }
+    const all = TIMELINE_STATUSES.map(s => s.key);
+    if (statusFilter.size === all.length) statusFilter = new Set([k]);          /* unfiltered -> focus one */
+    else if (statusFilter.has(k)) { statusFilter.delete(k); if (statusFilter.size === 0) statusFilter = new Set(all); }
     else statusFilter.add(k);
     renderAll(true);
   }));
@@ -349,16 +355,33 @@ function renderGantt() {
   let shown = 0;
   let html = '';
 
-  /* axis */
+  /* quarter-condensed region geometry (for the tint) */
+  const firstQCol = scale.cols.find(c => c.kind === 'q');
+  const qRegionX = firstQCol ? firstQCol.x : null;
+  const todayX = scale.xOf(scale.now);
+  const todayVisible = todayX > 0 && todayX < scale.total;
+
+  /* axis: quarter row + month row; quarter columns have no month label */
   html += '<div class="g-axis"><div class="g-axis-label"></div><div class="g-axis-cols" style="width:' + scale.total + 'px">' +
     '<div class="g-qrow">' + scale.qgroups.map(q => '<div class="g-q" style="width:' + q.w + 'px">' + q.label + '</div>').join('') + '</div>' +
-    '<div class="g-mrow">' + scale.cols.map(c => '<div class="g-m' + (c.kind === 'q' ? ' qcol' : '') + '" style="width:' + c.w + 'px">' + (c.kind === 'q' ? 'qtr' : c.label) + '</div>').join('') + '</div>' +
+    '<div class="g-mrow">' + scale.cols.map(c => '<div class="g-m" style="width:' + c.w + 'px">' + (c.kind === 'q' ? '' : c.label) + '</div>').join('') + '</div>' +
     '</div></div>';
 
+  /* body: one shared overlay (grid + quarter tint + today line) spans every row,
+     so columns and the today line stay continuous and perfectly aligned */
   html += '<div class="g-body">';
-  const gridlines = scale.cols.map(c =>
-    '<div class="g-gridline' + (c.t0.getMonth() % 3 === 0 ? ' qline' : '') + '" style="left:' + c.x + 'px"></div>').join('') +
-    '<div class="g-gridline qline" style="left:' + (scale.total - 1) + 'px"></div>';
+  html += '<div class="g-overlay" style="left:' + LABEL_W + 'px;width:' + scale.total + 'px">' +
+    (qRegionX != null ? '<div class="g-qtint" style="left:' + qRegionX + 'px;width:' + (scale.total - qRegionX) + 'px"></div>' : '') +
+    scale.cols.map(c => '<div class="g-gridline' + (c.t0.getMonth() % 3 === 0 ? ' qline' : '') + '" style="left:' + c.x + 'px"></div>').join('') +
+    '<div class="g-gridline qline" style="left:' + (scale.total - 1) + 'px"></div>' +
+    '</div>';
+  /* today marker sits in its own overlay ABOVE rows and category bands,
+     so the line is continuous top-to-bottom and the tag is never hidden */
+  if (todayVisible) {
+    html += '<div class="g-overlay g-overlay-top" style="left:' + LABEL_W + 'px;width:' + scale.total + 'px">' +
+      '<div class="g-todayline" style="left:' + todayX + 'px"></div>' +
+      '<div class="g-today-tag" style="left:' + (todayX + 4) + 'px">Today</div></div>';
+  }
 
   cats.forEach(cat => {
     const scheduled = (cat.projects || []).filter(p => passesFilter(cat, p) && isScheduled(p));
@@ -366,43 +389,56 @@ function renderGantt() {
     if (!scheduled.length && !unscheduled.length) return;
     shown += scheduled.length + unscheduled.length;
 
-    html += '<div class="g-catrow"><div class="g-catlabel">' + esc(cat.name) + '</div><div class="g-catlane" style="width:' + scale.total + 'px;position:relative"><div class="g-grid" style="left:0;right:0">' + gridlines + '</div></div></div>';
+    html += '<div class="g-catrow"><div class="g-catlabel">' + esc(cat.name) + '</div><div class="g-catlane"></div></div>';
 
     scheduled.forEach(p => {
       const s = stat(p.status);
       const a = parseDate(p.startDate), b = parseDate(p.endDate);
-      let bar = '';
+      const dim = (p.status === 'completed' || p.status === 'cancelled') ? ' dim' : '';
+      let barHtml = '';
+      const tip = esc(p.name) + ' — ' + s.label + ' (' + fmtShort(p.startDate) + ' to ' + fmtShort(p.endDate) + ')';
       if (b < scale.tMin) {
-        /* entirely before the visible window */
-        bar = '<button class="g-outside left" data-open="' + p.id + '" style="border-color:' + s.c + ';color:' + s.c + '" title="' + esc(p.name) + ' — ' + s.label + ' (' + fmtShort(p.startDate) + ' to ' + fmtShort(p.endDate) + ')">&#9666; ended ' + fmtShort(p.endDate) + '</button>';
+        barHtml = '<button class="g-outside left" data-open="' + p.id + '" style="border-color:' + s.c + ';color:' + s.c + '" title="' + tip + '">&#9666; ended ' + fmtShort(p.endDate) + '</button>';
       } else if (a > scale.tMax) {
-        /* entirely after the visible window */
-        bar = '<button class="g-outside right" data-open="' + p.id + '" style="border-color:' + s.c + ';color:' + s.c + '" title="' + esc(p.name) + ' — ' + s.label + ' (' + fmtShort(p.startDate) + ' to ' + fmtShort(p.endDate) + ')">starts ' + fmtShort(p.startDate) + ' &#9656;</button>';
+        barHtml = '<button class="g-outside right" data-open="' + p.id + '" style="border-color:' + s.c + ';color:' + s.c + '" title="' + tip + '">starts ' + fmtShort(p.startDate) + ' &#9656;</button>';
       } else {
-        const x0 = scale.xOf(a), x1 = Math.max(scale.xOf(b), x0 + 8);
+        const x0 = scale.xOf(a), x1 = Math.max(scale.xOf(b), x0 + 10);
+        const w = x1 - x0;
         const fadeL = a < scale.tMin, fadeR = b > scale.tMax;
-        bar = '<div class="g-bar' + (fadeL ? ' fade-l' : '') + (fadeR ? ' fade-r' : '') + '" data-open="' + p.id + '"' +
-          ' style="left:' + x0 + 'px;width:' + (x1 - x0) + 'px;background:' + s.bg + ';border-color:' + s.c + ';color:' + s.c + ';--bc:' + s.c + '"' +
-          ' title="' + esc(p.name) + ' — ' + s.label + ' (' + fmtShort(p.startDate) + ' to ' + fmtShort(p.endDate) + ')">' +
-          '<span class="g-barlabel">' + esc(p.name) + '</span></div>';
+        const approxLabelW = p.name.length * 6.3 + 20;        /* rough text width */
+        const msXs = (p.milestones || [])
+          .map(m => parseDate(m.date)).filter(d => d && d >= scale.tMin && d <= scale.tMax)
+          .map(d => scale.xOf(d));
+        const msOnLabel = msXs.some(mx => mx >= x0 - 6 && mx <= x0 + approxLabelW + 8);
+        const labelInside = w >= approxLabelW && !msOnLabel;
+        let outLabel = '';
+        if (!labelInside) {
+          if (x1 + 8 + approxLabelW <= scale.total) {
+            outLabel = '<span class="g-barlabel-out" style="left:' + (x1 + 8) + 'px">' + esc(p.name) + '</span>';
+          } else {
+            outLabel = '<span class="g-barlabel-out" style="right:' + (scale.total - x0 + 8) + 'px">' + esc(p.name) + '</span>';
+          }
+        }
+        barHtml = '<div class="g-bar' + (fadeL ? ' fade-l' : '') + (fadeR ? ' fade-r' : '') + dim + '" data-open="' + p.id + '"' +
+          ' style="left:' + x0 + 'px;width:' + w + 'px;background:' + s.c + '" title="' + tip + '">' +
+          (labelInside ? '<span class="g-barlabel">' + esc(p.name) + '</span>' : '') + '</div>' + outLabel;
+        (p.milestones || []).forEach(m => {
+          const md = parseDate(m.date);
+          if (!md || md < scale.tMin || md > scale.tMax) return;
+          barHtml += '<div class="g-ms' + (m.done ? ' ms-done' : '') + '" data-open="' + p.id + '" style="left:' + scale.xOf(md) + 'px" title="' + esc(m.label) + ' — ' + fmtDate(m.date) + (m.done ? ' (complete)' : '') + '"></div>';
+        });
       }
-      let ms = '';
-      (p.milestones || []).forEach(m => {
-        const md = parseDate(m.date);
-        if (!md || md < scale.tMin || md > scale.tMax) return;
-        ms += '<div class="g-ms' + (m.done ? ' ms-done' : '') + '" data-open="' + p.id + '" style="left:' + scale.xOf(md) + 'px;border-color:' + s.c + ';color:' + s.c + '" title="' + esc(m.label) + ' — ' + fmtDate(m.date) + (m.done ? ' (complete)' : '') + '"></div>';
-      });
-      html += '<div class="g-row"><div class="g-rowlabel" data-open="' + p.id + '"><span class="g-rowdot" style="background:' + s.c + '"></span><span class="g-rowname">' + esc(p.name) + '</span></div>' +
-        '<div class="g-rowlane" data-open="' + p.id + '" style="width:' + scale.total + 'px"><div class="g-grid" style="left:0;right:0">' + gridlines + '</div>' + bar + ms + '</div></div>';
+      html += '<div class="g-row"><div class="g-rowlabel" data-open="' + p.id + '" title="' + esc(p.name) + '"><span class="g-rowdot" style="background:' + s.c + '"></span><span class="g-rowname">' + esc(p.name) + '</span></div>' +
+        '<div class="g-rowlane" data-open="' + p.id + '" style="width:' + scale.total + 'px">' + barHtml + '</div></div>';
     });
 
     if (unscheduled.length) {
-      html += '<div style="display:flex"><div class="g-rowlabel" style="height:auto;min-height:42px;cursor:default"><span class="g-rowname" style="color:var(--text-dim);font-style:italic">Unscheduled</span></div>' +
-        '<div class="g-unsched" style="flex:1;width:' + scale.total + 'px"><span class="g-unsched-label">Needs dates</span><div class="g-unsched-chips">' +
+      html += '<div class="g-unschedrow"><div class="g-unschedlabel"><span>Unscheduled</span></div>' +
+        '<div class="g-unsched-chips" style="width:' + scale.total + 'px">' +
         unscheduled.map(p => {
           const s = stat(p.status);
-          return '<button class="us-chip" data-open="' + p.id + '" title="Missing a start or end date"><span class="dot" style="background:' + s.c + '"></span>' + esc(p.name) + '</button>';
-        }).join('') + '</div></div></div>';
+          return '<button class="us-chip" data-open="' + p.id + '" title="' + esc(p.name) + ' — missing a start or end date"><span class="dot" style="background:' + s.c + '"></span>' + esc(p.name) + '</button>';
+        }).join('') + '</div></div>';
     }
   });
   html += '</div>';
@@ -414,26 +450,6 @@ function renderGantt() {
   }
   g.innerHTML = html;
   $('ganttCount').textContent = shown;
-
-  /* today marker — append into each row lane via absolute overlay */
-  const todayX = scale.xOf(scale.now);
-  if (todayX > 0 && todayX < scale.total) {
-    g.querySelectorAll('.g-rowlane, .g-catlane').forEach(lane => {
-      const t = document.createElement('div');
-      t.className = 'g-today';
-      t.style.left = todayX + 'px';
-      lane.appendChild(t);
-    });
-    const firstCatLane = g.querySelector('.g-catlane');
-    if (firstCatLane) {
-      const tag = document.createElement('div');
-      tag.className = 'g-today-tag';
-      tag.style.left = todayX + 'px';
-      tag.style.position = 'absolute';
-      tag.textContent = 'Today';
-      firstCatLane.appendChild(tag);
-    }
-  }
 
   g.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', e => {
     e.stopPropagation();
@@ -475,7 +491,10 @@ function renderList() {
             '<div class="p-summary">' + (p.updateSummary ? esc(p.updateSummary) : '<span style="font-style:italic">No update yet</span>') + '</div>' +
             '</div>';
         }).join('')
-      : '<div class="list-empty">No projects match the current filters in this department.</div>';
+      : (() => {
+          const bl = (cat.projects || []).filter(p => p.status === 'backlog').length;
+          return '<div class="list-empty">No scheduled or active projects' + (bl ? ' — ' + bl + ' in the backlog' : '') + '.</div>';
+        })();
     const addRow = editor
       ? '<div class="add-inline" data-addproj="' + cat.id + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add project</div>'
       : '';
