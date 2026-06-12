@@ -37,6 +37,8 @@ let backlogOpen = false;
 let statusFilter = new Set(TIMELINE_STATUSES.map(s => s.key));
 let deptFilter = 'all';
 let modalCb = null;
+let firstPaint = true;
+const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---------------- helpers ---------------- */
 const $ = id => document.getElementById(id);
@@ -167,6 +169,7 @@ function showApp() {
   badge.className = 'role-badge ' + (editor ? 'role-editor' : 'role-viewer');
   $('roleText').textContent = editor ? 'Editor' : 'View only';
   renderAll();
+  setTimeout(() => { firstPaint = false; }, 1200);
 }
 
 async function loadData() {
@@ -223,6 +226,7 @@ function renderAll(keepPanel) {
   renderHeaderMeta();
   renderKpis();
   renderFilters();
+  renderMilestoneRail();
   renderGantt();
   renderList();
   renderBacklog();
@@ -238,17 +242,73 @@ function renderHeaderMeta() {
 }
 
 /* ---------------- KPIs ---------------- */
+function countUp(el, target) {
+  if (reducedMotion || !firstPaint) { el.textContent = target; return; }
+  const t0 = performance.now(), dur = 900;
+  (function f(t) {
+    const k = Math.min(1, (t - t0) / dur);
+    el.textContent = Math.round(target * (1 - Math.pow(1 - k, 3)));
+    if (k < 1) requestAnimationFrame(f);
+  })(t0);
+}
 function renderKpis() {
   const counts = {};
   STATUSES.forEach(s => counts[s.key] = 0);
   allProjects(working).forEach(({ p }) => { if (counts[p.status] != null) counts[p.status]++; });
-  $('kpis').innerHTML = STATUSES.map(s => {
-    const isBacklog = s.key === 'backlog';
-    const on = !isBacklog && statusFilter.size === 1 && statusFilter.has(s.key);
+  const total = allProjects(working).length;
+  const inMotion = counts['in-progress'] + counts['in-development'] + counts['testing'];
+
+  /* donut geometry */
+  const R = 34, C = 2 * Math.PI * R;
+  let acc = 0;
+  const segs = STATUSES.filter(s => counts[s.key] > 0).map(s => {
+    const frac = counts[s.key] / (total || 1);
+    const seg = { c: s.c, frac, off: acc };
+    acc += frac;
+    return seg;
+  });
+  const donut =
+    '<svg class="donut" width="86" height="86" viewBox="0 0 86 86">' +
+    '<circle class="track" cx="43" cy="43" r="' + R + '" fill="none" stroke-width="9"></circle>' +
+    segs.map(s =>
+      '<circle class="seg" cx="43" cy="43" r="' + R + '" fill="none" stroke="' + s.c + '" stroke-width="9" stroke-linecap="butt"' +
+      ' stroke-dasharray="0 ' + C + '" data-final="' + (Math.max(s.frac * C - 1.5, 0)) + ' ' + C + '"' +
+      ' stroke-dashoffset="' + (-s.off * C) + '" transform="rotate(-90 43 43)"></circle>').join('') +
+    '</svg>';
+
+  const hero =
+    '<div class="kpi kpi-hero">' + donut +
+    '<div><div class="kpi-num" id="kpiTotal">0</div>' +
+    '<div class="kpi-label">Initiatives</div>' +
+    '<div class="hero-sub"><b>' + inMotion + '</b> in motion &middot; <button class="hero-backlog" id="heroBacklog"><b>' + counts['backlog'] + '</b> in pipeline</button></div>' +
+    '</div></div>';
+
+  $('kpis').innerHTML = hero + STATUSES.filter(s =>
+    s.key !== 'backlog' && !(s.key === 'cancelled' && counts.cancelled === 0)
+  ).map(s => {
+    const on = statusFilter.size === 1 && statusFilter.has(s.key);
     return '<button class="kpi' + (on ? ' kpi-on' : '') + '" style="--kc:' + s.c + '" data-kpi="' + s.key + '">' +
       '<div class="kpi-num">' + counts[s.key] + '</div>' +
       '<div class="kpi-label"><span class="dot"></span>' + s.label + '</div></button>';
   }).join('');
+  countUp($('kpiTotal'), total);
+  const hb = $('heroBacklog');
+  if (hb) hb.addEventListener('click', () => {
+    backlogOpen = true;
+    renderBacklog();
+    $('backlogCard').scrollIntoView({ block: 'start' });
+  });
+  /* sweep the donut in (Web Animations API — deterministic) */
+  $('kpis').querySelectorAll('.donut .seg').forEach((el, i) => {
+    const C2 = 2 * Math.PI * 34;
+    el.setAttribute('stroke-dasharray', el.dataset.final);
+    if (!reducedMotion && firstPaint && el.animate) {
+      el.animate(
+        [{ strokeDasharray: '0 ' + C2 }, { strokeDasharray: el.dataset.final }],
+        { duration: 900, delay: i * 60, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'backwards' }
+      );
+    }
+  });
   $('kpis').querySelectorAll('[data-kpi]').forEach(el => el.addEventListener('click', () => {
     const k = el.dataset.kpi;
     if (k === 'backlog') {
@@ -262,6 +322,40 @@ function renderKpis() {
     else statusFilter = new Set([k]);
     renderAll(true);
   }));
+}
+
+/* ---------------- upcoming milestones rail ---------------- */
+function renderMilestoneRail() {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const cutoffPast = new Date(today); cutoffPast.setDate(cutoffPast.getDate() - 21);
+  const items = [];
+  allProjects(working).forEach(({ cat, p }) => {
+    if (p.status === 'backlog' || p.status === 'cancelled' || p.status === 'completed') return;
+    if (deptFilter !== 'all' && cat.id !== deptFilter) return;
+    (p.milestones || []).forEach(m => {
+      const d = parseDate(m.date);
+      if (!m.done && d && d >= cutoffPast) items.push({ cat, p, m, d });
+    });
+  });
+  items.sort((a, b) => a.d - b.d);
+  const top = items.slice(0, 6);
+  const card = $('msRailCard');
+  if (!top.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  $('msRail').innerHTML = top.map((it, i) => {
+    const s = stat(it.p.status);
+    const days = Math.round((it.d - today) / 86400000);
+    let cls = 'msr-when', when;
+    if (days < 0) { cls += ' overdue'; when = Math.abs(days) + 'd overdue'; }
+    else if (days === 0) when = 'today';
+    else if (days <= 30) when = 'in ' + days + 'd';
+    else { cls += ' far'; when = 'in ' + days + 'd'; }
+    return '<div class="msr-card' + (firstPaint && !reducedMotion ? ' anim' : '') + '" data-open="' + it.p.id + '" style="animation-delay:' + (i * 70) + 'ms">' +
+      '<div class="msr-top"><span class="' + cls + '">' + when + '</span><span class="msr-date">' + fmtDate(it.m.date) + '</span></div>' +
+      '<div class="msr-label">' + esc(it.m.label) + '</div>' +
+      '<div class="msr-proj"><span class="dot" style="background:' + s.c + '"></span>' + esc(it.p.name) + ' &middot; ' + esc(it.cat.name) + '</div></div>';
+  }).join('');
+  $('msRail').querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', () => openPanel(el.dataset.open)));
 }
 
 /* ---------------- filters ---------------- */
@@ -383,11 +477,14 @@ function renderGantt() {
       '<div class="g-today-tag" style="left:' + (todayX + 4) + 'px">Today</div></div>';
   }
 
+  let unschedCount = 0;
+  let rowIdx = 0;
+  const anim = firstPaint && !reducedMotion;
   cats.forEach(cat => {
     const scheduled = (cat.projects || []).filter(p => passesFilter(cat, p) && isScheduled(p));
-    const unscheduled = (cat.projects || []).filter(p => passesFilter(cat, p) && !isScheduled(p));
-    if (!scheduled.length && !unscheduled.length) return;
-    shown += scheduled.length + unscheduled.length;
+    unschedCount += (cat.projects || []).filter(p => passesFilter(cat, p) && !isScheduled(p)).length;
+    if (!scheduled.length) return;          /* the timeline shows committed work only */
+    shown += scheduled.length;
 
     html += '<div class="g-catrow"><div class="g-catlabel">' + esc(cat.name) + '</div><div class="g-catlane"></div></div>';
 
@@ -419,32 +516,28 @@ function renderGantt() {
             outLabel = '<span class="g-barlabel-out" style="right:' + (scale.total - x0 + 8) + 'px">' + esc(p.name) + '</span>';
           }
         }
-        barHtml = '<div class="g-bar' + (fadeL ? ' fade-l' : '') + (fadeR ? ' fade-r' : '') + dim + '" data-open="' + p.id + '"' +
-          ' style="left:' + x0 + 'px;width:' + w + 'px;background:' + s.c + '" title="' + tip + '">' +
+        barHtml = '<div class="g-bar' + (fadeL ? ' fade-l' : '') + (fadeR ? ' fade-r' : '') + dim + (anim ? ' anim' : '') + '" data-open="' + p.id + '"' +
+          ' style="left:' + x0 + 'px;width:' + w + 'px;background:' + s.c + ';animation-delay:' + (rowIdx * 55) + 'ms" title="' + tip + '">' +
           (labelInside ? '<span class="g-barlabel">' + esc(p.name) + '</span>' : '') + '</div>' + outLabel;
         (p.milestones || []).forEach(m => {
           const md = parseDate(m.date);
           if (!md || md < scale.tMin || md > scale.tMax) return;
-          barHtml += '<div class="g-ms' + (m.done ? ' ms-done' : '') + '" data-open="' + p.id + '" style="left:' + scale.xOf(md) + 'px" title="' + esc(m.label) + ' — ' + fmtDate(m.date) + (m.done ? ' (complete)' : '') + '"></div>';
+          barHtml += '<div class="g-ms' + (m.done ? ' ms-done' : '') + (anim ? ' anim' : '') + '" data-open="' + p.id + '" style="left:' + scale.xOf(md) + 'px" title="' + esc(m.label) + ' — ' + fmtDate(m.date) + (m.done ? ' (complete)' : '') + '"></div>';
         });
       }
+      rowIdx++;
       html += '<div class="g-row"><div class="g-rowlabel" data-open="' + p.id + '" title="' + esc(p.name) + '"><span class="g-rowdot" style="background:' + s.c + '"></span><span class="g-rowname">' + esc(p.name) + '</span></div>' +
         '<div class="g-rowlane" data-open="' + p.id + '" style="width:' + scale.total + 'px">' + barHtml + '</div></div>';
     });
 
-    if (unscheduled.length) {
-      html += '<div class="g-unschedrow"><div class="g-unschedlabel"><span>Unscheduled</span></div>' +
-        '<div class="g-unsched-chips" style="width:' + scale.total + 'px">' +
-        unscheduled.map(p => {
-          const s = stat(p.status);
-          return '<button class="us-chip" data-open="' + p.id + '" title="' + esc(p.name) + ' — missing a start or end date"><span class="dot" style="background:' + s.c + '"></span>' + esc(p.name) + '</button>';
-        }).join('') + '</div></div>';
-    }
   });
   html += '</div>';
 
+  $('unschedNote').textContent = unschedCount
+    ? unschedCount + ' active initiative(s) have no committed dates yet — find them under Projects.'
+    : '';
   if (!shown) {
-    g.innerHTML = '<div class="gantt-empty">No projects match the current filters. Adjust the status or department filters above.</div>';
+    g.innerHTML = '<div class="gantt-empty">Nothing scheduled under the current filters. Add start and end dates to a project to plot it here.</div>';
     $('ganttCount').textContent = '0';
     return;
   }
