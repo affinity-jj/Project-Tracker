@@ -51,18 +51,27 @@
 
     <div class="filterbar" id="filterbar"></div>
 
+    <!-- Upcoming milestones -->
+    <section class="card msrail-card" id="msRailCard" style="display:none">
+      <div class="msrail-head">
+        <span class="msrail-title">Upcoming Milestones</span>
+        <span class="msrail-sub">Next committed dates across the portfolio</span>
+      </div>
+      <div class="msrail" id="msRail"></div>
+    </section>
+
     <!-- Timeline -->
     <section class="card" id="timelineCard">
       <div class="card-head">
         <div class="card-title">Timeline <span class="count" id="ganttCount"></span></div>
-        <div class="card-sub">Monthly through the current and next two quarters, quarterly beyond. Click any bar or row for details.</div>
+        <div class="card-sub">Committed work only — monthly through the next two quarters, quarterly beyond. Click any bar for details.<span id="unschedNote" class="unsched-note"></span></div>
       </div>
       <div class="gantt-scroll" id="ganttScroll"><div class="gantt" id="gantt"></div></div>
       <div class="gantt-legend">
         <span class="li"><span class="legend-today"></span> Today</span>
         <span class="li"><span class="legend-ms"></span> Milestone</span>
         <span class="li"><span class="legend-ms done"></span> Milestone complete</span>
-        <span class="li"><span class="legend-chip"></span> Unscheduled — needs start and end dates</span>
+
       </div>
     </section>
 

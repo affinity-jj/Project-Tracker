@@ -186,7 +186,7 @@ button{font-family:var(--font)}
 /* ---------- project list ---------- */
 .cat-block{border-bottom:1px solid var(--border)}
 .cat-block:last-child{border-bottom:none}
-.cat-head{display:flex;align-items:center;gap:13px;padding:15px 26px;cursor:pointer;user-select:none;transition:background .12s}
+.cat-head{display:flex;align-items:center;gap:13px;padding:12px 26px;cursor:pointer;user-select:none;transition:background .12s}
 .cat-head:hover{background:var(--surface-hover)}
 .cat-chev{width:18px;height:18px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);transition:transform .25s}
 .cat-block.open .cat-chev{transform:rotate(90deg);color:var(--gold)}
@@ -199,14 +199,14 @@ button{font-family:var(--font)}
 .icon-btn.danger:hover{background:var(--bg-cancelled);color:var(--c-cancelled);border-color:transparent}
 .cat-body{display:none}
 .cat-block.open .cat-body{display:block}
-.p-row{display:grid;grid-template-columns:minmax(190px,1.4fr) 138px 175px minmax(130px,1fr) minmax(180px,1.6fr);gap:14px;align-items:center;padding:13px 26px 13px 57px;border-top:1px solid rgba(38,46,66,.45);cursor:pointer;transition:background .12s}
+.p-row{display:grid;grid-template-columns:minmax(190px,1.4fr) 138px 175px minmax(130px,1fr) minmax(180px,1.6fr);gap:14px;align-items:center;padding:11px 26px 11px 57px;border-top:1px solid rgba(38,46,66,.45);cursor:pointer;transition:background .12s}
 .p-row:hover{background:var(--surface-hover)}
 .p-name{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .p-dates{font-family:var(--mono);font-size:11.5px;color:var(--text-muted);white-space:nowrap}
 .p-dates .unsch{color:var(--text-dim);font-style:italic}
 .p-meta{font-size:12.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .p-summary{font-size:12.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.p-cols-head{display:grid;grid-template-columns:minmax(190px,1.4fr) 138px 175px minmax(130px,1fr) minmax(180px,1.6fr);gap:14px;padding:9px 26px 9px 57px;font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);border-top:1px solid rgba(38,46,66,.45)}
+.p-cols-head{display:grid;grid-template-columns:minmax(190px,1.4fr) 138px 175px minmax(130px,1fr) minmax(180px,1.6fr);gap:14px;padding:8px 26px 8px 57px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);border-top:1px solid rgba(38,46,66,.45)}
 .status-badge{display:inline-flex;align-items:center;gap:7px;padding:4px 12px;border-radius:16px;font-size:11.5px;font-weight:600;white-space:nowrap;width:fit-content}
 .status-badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 .add-inline{display:flex;align-items:center;gap:8px;padding:11px 26px 13px 57px;color:var(--text-dim);cursor:pointer;font-size:13px;transition:color .12s;border-top:1px solid rgba(38,46,66,.45)}
@@ -308,3 +308,46 @@ button{font-family:var(--font)}
   .p-row > :nth-child(n+3),.p-cols-head > :nth-child(n+3){display:none}
   .panel{width:100vw;max-width:100vw}
 }
+
+/* ---------- hero KPI / donut ---------- */
+.kpi-hero{display:flex;align-items:center;gap:18px;cursor:default;grid-column:span 2;min-width:260px}
+.kpi-hero:hover{border-color:var(--border);background:var(--surface)}
+.kpi-hero::before{background:var(--gold)}
+.donut{flex-shrink:0}
+.donut .track{stroke:var(--raised)}
+.donut .seg{transition:stroke-dasharray 1s cubic-bezier(.4,0,.2,1)}
+.kpi-hero .kpi-num{font-size:34px}
+.kpi-hero .hero-sub{font-size:11.5px;color:var(--text-muted);margin-top:4px;line-height:1.5}
+.kpi-hero .hero-sub b{color:var(--gold);font-weight:600}
+
+/* ---------- milestone rail ---------- */
+.msrail-card{background:linear-gradient(180deg, rgba(217,179,106,.05), transparent 70%), var(--surface)}
+.msrail-head{display:flex;align-items:baseline;gap:14px;padding:16px 26px 4px}
+.msrail-title{font-family:var(--display);font-weight:500;font-size:16.5px}
+.msrail-sub{font-size:12px;color:var(--text-dim)}
+.msrail{display:flex;gap:12px;padding:12px 26px 20px;overflow-x:auto}
+.msr-card{flex:0 0 230px;background:var(--raised);border:1px solid var(--border);border-radius:11px;padding:13px 16px;cursor:pointer;transition:border-color .15s,transform .15s}
+.msr-card:hover{border-color:var(--gold-border);transform:translateY(-2px)}
+.msr-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.msr-when{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2.5px 9px;border-radius:10px;background:var(--gold-bg);color:var(--gold)}
+.msr-when.overdue{background:var(--bg-cancelled);color:var(--c-cancelled)}
+.msr-when.far{background:var(--raised);border:1px solid var(--border-light);color:var(--text-muted)}
+.msr-date{font-family:var(--mono);font-size:10.5px;color:var(--text-dim)}
+.msr-label{font-size:13px;font-weight:600;line-height:1.4;margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.msr-proj{font-size:11.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msr-proj .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:1px}
+
+/* ---------- entrance animations (first paint only) ---------- */
+@keyframes barIn{from{transform:scaleX(.001)}}
+.g-bar.anim{animation:barIn .6s cubic-bezier(.22,.9,.3,1) both;transform-origin:left center}
+@keyframes msIn{from{opacity:0}}
+.g-ms.anim{animation:msIn .35s .55s both}
+@keyframes railIn{from{opacity:0;transform:translateY(8px)}}
+.msr-card.anim{animation:railIn .5s cubic-bezier(.22,.9,.3,1) both}
+
+.unsched-note{display:block;margin-top:2px;color:var(--text-dim);font-style:italic}
+
+.hero-backlog{background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(217,179,106,.4);text-underline-offset:3px}
+.hero-backlog:hover{text-decoration-color:var(--gold)}
+.hero-backlog b{color:var(--gold);font-weight:600}
+.msrail{-webkit-mask-image:linear-gradient(90deg,#000 92%,transparent);mask-image:linear-gradient(90deg,#000 92%,transparent)}
