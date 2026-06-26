@@ -71,6 +71,7 @@
         <span class="li"><span class="legend-today"></span> Today</span>
         <span class="li"><span class="legend-ms"></span> Milestone</span>
         <span class="li"><span class="legend-ms done"></span> Milestone complete</span>
+        <span class="li"><span class="legend-roistar">★</span> Primary ROI driver</span>
 
       </div>
     </section>
@@ -118,6 +119,22 @@
     <div class="modal-actions">
       <button class="btn" id="modalCancel">Cancel</button>
       <button class="btn btn-gold" id="modalOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- ROI driver manager -->
+<div class="modal-overlay" id="roiOverlay">
+  <div class="modal modal-wide">
+    <h3>Manage ROI drivers</h3>
+    <p>Define the ROI drivers projects can be tagged with. Click a star swatch to change its colour. Changes are staged until you save.</p>
+    <div class="roi-manager-list" id="roiManagerList"></div>
+    <div class="roi-add-row">
+      <input class="modal-input" id="roiNewName" placeholder="New ROI driver name">
+      <button class="btn btn-sm" id="roiAddBtn">Add driver</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-gold" id="roiDoneBtn">Done</button>
     </div>
   </div>
 </div>

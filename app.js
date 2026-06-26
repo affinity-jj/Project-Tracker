@@ -18,6 +18,18 @@ const STATUSES = [
   { key: 'backlog',        label: 'Backlog',        c: 'var(--c-backlog)',   bg: 'var(--bg-backlog)' }
 ];
 const TIMELINE_STATUSES = STATUSES.filter(s => s.key !== 'backlog');
+/* ROI drivers are a managed taxonomy (stored in data.roiDrivers). Status colors
+   stay reserved for project state; ROI uses a separate palette shown only via the
+   ★ marker / pills so the two visual systems never compete. */
+const ROI_PALETTE = ['#e0a458', '#5eead4', '#c4b5fd', '#fca5a5', '#93c5fd', '#fcd34d', '#fda4af', '#86efac', '#7dd3fc', '#f0abfc'];
+const DEFAULT_ROI_DRIVERS = [
+  { id: 'roi-cost',         name: 'Cost Reduction',            color: '#e0a458' },
+  { id: 'roi-revenue',      name: 'Revenue Growth',            color: '#5eead4' },
+  { id: 'roi-productivity', name: 'Productivity / Efficiency', color: '#c4b5fd' },
+  { id: 'roi-risk',         name: 'Risk & Compliance',         color: '#fca5a5' },
+  { id: 'roi-experience',   name: 'Customer Experience',       color: '#93c5fd' },
+  { id: 'roi-quality',      name: 'Quality / Accuracy',        color: '#fcd34d' }
+];
 const KEY_STORE = 'portfolioKey';
 const ROLE_STORE = 'portfolioRole';
 const NAME_STORE = 'portfolioCommenterName';
@@ -36,6 +48,8 @@ let openCats = new Set();   /* category ids expanded in the list */
 let backlogOpen = false;
 let statusFilter = new Set(TIMELINE_STATUSES.map(s => s.key));
 let deptFilter = 'all';
+let teamFilter = 'all';
+let roiFilter = 'all';
 let modalCb = null;
 let firstPaint = true;
 const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -76,6 +90,44 @@ function findProject(data, id) {
       if (p.id === id) return { cat: c, p };
   return null;
 }
+/* ---- ROI driver / team helpers ---- */
+function roiList() { return (working && working.roiDrivers) || []; }
+function roiById(id) { return roiList().find(d => d.id === id) || null; }
+function distinctTeams() {
+  const set = new Set();
+  allProjects(working).forEach(({ p }) => { if (p.team) set.add(p.team); });
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+function nextRoiColor() {
+  const used = roiList().map(d => d.color);
+  return ROI_PALETTE.find(c => !used.includes(c)) || ROI_PALETTE[roiList().length % ROI_PALETTE.length];
+}
+/* ★ marker for a project's primary ROI driver — colored by the driver, shaped as a
+   star so it never reads as a status dot. Empty string when no primary is set. */
+function roiStarMark(p) {
+  const d = roiById(p.roiPrimary);
+  return d ? '<span class="g-roistar" style="color:' + d.color + '" title="Primary ROI: ' + esc(d.name) + '">★</span>' : '';
+}
+/* A driver pill: filled-border + star for primary, neutral outline for secondary. */
+function roiPillHtml(d, primary, extraClass) {
+  return '<span class="roi-pill' + (primary ? ' primary' : '') + (extraClass ? ' ' + extraClass : '') +
+    '" style="--rc:' + d.color + '"><span class="roi-star">★</span>' + esc(d.name) + '</span>';
+}
+/* Backfill new fields on data loaded from storage (older saves predate them) and
+   drop any ROI references that point at a deleted driver. */
+function normalizeData(d) {
+  if (!d) return d;
+  if (!Array.isArray(d.roiDrivers) || d.roiDrivers.length === 0) d.roiDrivers = clone(DEFAULT_ROI_DRIVERS);
+  const ids = new Set(d.roiDrivers.map(x => x.id));
+  (d.categories || []).forEach(c => (c.projects || []).forEach(p => {
+    if (typeof p.team !== 'string') p.team = '';
+    if (typeof p.roiPrimary !== 'string') p.roiPrimary = '';
+    if (!Array.isArray(p.roiSecondary)) p.roiSecondary = [];
+    if (p.roiPrimary && !ids.has(p.roiPrimary)) p.roiPrimary = '';
+    p.roiSecondary = p.roiSecondary.filter(id => ids.has(id) && id !== p.roiPrimary);
+  }));
+  return d;
+}
 function toast(msg, ok = true) {
   $('toastIcon').innerHTML = ok
     ? '<svg class="ok" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
@@ -111,6 +163,64 @@ function confirmModal(title, text, okLabel, cb) {
   $('modalOverlay').classList.add('show');
 }
 function closeModal() { $('modalOverlay').classList.remove('show'); modalCb = null; }
+
+/* ---------------- ROI driver manager ---------------- */
+function openRoiManager() {
+  if (session.role !== 'editor') return;
+  $('roiOverlay').classList.add('show');
+  $('roiNewName').value = '';
+  renderRoiManager();
+  setTimeout(() => $('roiNewName').focus(), 30);
+}
+function closeRoiManager() {
+  $('roiOverlay').classList.remove('show');
+  renderAll();   /* refresh filters, list, gantt and the open panel with the new drivers */
+}
+function renderRoiManager() {
+  const drivers = roiList();
+  const xIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  const list = $('roiManagerList');
+  list.innerHTML = drivers.length
+    ? drivers.map(d =>
+        '<div class="roi-mrow">' +
+        '<button class="roi-swatch" data-roicolor="' + d.id + '" title="Click to cycle colour" style="background:' + d.color + '">★</button>' +
+        '<input class="p-input roi-name-input" data-roiname="' + d.id + '" value="' + esc(d.name) + '">' +
+        '<button class="icon-btn danger" data-roidel="' + d.id + '" title="Remove driver">' + xIcon + '</button>' +
+        '</div>').join('')
+    : '<div class="roi-hint">No drivers yet — add one below.</div>';
+
+  list.querySelectorAll('[data-roicolor]').forEach(el => el.addEventListener('click', () => {
+    const d = roiById(el.dataset.roicolor); if (!d) return;
+    const i = ROI_PALETTE.indexOf(d.color);
+    d.color = ROI_PALETTE[(i + 1) % ROI_PALETTE.length];
+    markDirty(); renderRoiManager();
+  }));
+  list.querySelectorAll('[data-roiname]').forEach(el => el.addEventListener('change', () => {
+    const d = roiById(el.dataset.roiname); if (!d) return;
+    const v = el.value.trim();
+    if (!v) { el.value = d.name; return; }
+    if (v !== d.name) { d.name = v; markDirty(); }
+  }));
+  list.querySelectorAll('[data-roidel]').forEach(el => el.addEventListener('click', () => {
+    const d = roiById(el.dataset.roidel); if (!d) return;
+    confirmModal('Remove ROI driver', 'Remove “' + d.name + '”? It will be cleared from any project using it. This is staged until you save.', 'Remove', () => {
+      working.roiDrivers = roiList().filter(x => x.id !== d.id);
+      allProjects(working).forEach(({ p }) => {
+        if (p.roiPrimary === d.id) p.roiPrimary = '';
+        p.roiSecondary = (p.roiSecondary || []).filter(x => x !== d.id);
+      });
+      markDirty(); renderRoiManager();
+    });
+  }));
+}
+function addRoiDriver() {
+  const inp = $('roiNewName');
+  const name = inp.value.trim();
+  if (!name) { toast('Driver name is required', false); return; }
+  working.roiDrivers = roiList();
+  working.roiDrivers.push({ id: gid('roi'), name, color: nextRoiColor() });
+  markDirty(); inp.value = ''; renderRoiManager(); inp.focus();
+}
 
 /* ---------------- API ---------------- */
 async function api(method, body) {
@@ -174,7 +284,7 @@ function showApp() {
 
 async function loadData() {
   const res = await api('GET');
-  serverData = res.data;
+  serverData = normalizeData(res.data);
   storageOk = res.storage !== false;
   session.role = res.role || session.role;
   working = clone(serverData);
@@ -199,7 +309,7 @@ async function saveChanges() {
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
     const res = await api('PUT', working);
-    serverData = res.data;
+    serverData = normalizeData(res.data);
     working = clone(serverData);
     changeCount = 0;
     renderAll();
@@ -360,9 +470,16 @@ function renderMilestoneRail() {
 
 /* ---------------- filters ---------------- */
 function renderFilters() {
+  const editor = session.role === 'editor';
   const deptOpts = ['<option value="all">All departments</option>']
     .concat((working.categories || []).map(c =>
       '<option value="' + esc(c.id) + '"' + (deptFilter === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>'));
+  const teamOpts = ['<option value="all">All teams</option>']
+    .concat(distinctTeams().map(t =>
+      '<option value="' + esc(t) + '"' + (teamFilter === t ? ' selected' : '') + '>' + esc(t) + '</option>'));
+  const roiOpts = ['<option value="all">All ROI drivers</option>']
+    .concat(roiList().map(d =>
+      '<option value="' + esc(d.id) + '"' + (roiFilter === d.id ? ' selected' : '') + '>' + esc(d.name) + '</option>'));
   $('filterbar').innerHTML =
     '<span class="filterbar-label">Status</span>' +
     TIMELINE_STATUSES.map(s => {
@@ -371,6 +488,9 @@ function renderFilters() {
       return '<button class="chip' + (on ? ' chip-on' : '') + '" style="--cc:' + s.c + ';--cbg:' + s.bg + '" data-chip="' + s.key + '"><span class="dot"></span>' + s.label + '</button>';
     }).join('') +
     '<select class="dept-select" id="deptSelect">' + deptOpts.join('') + '</select>' +
+    '<select class="dept-select" id="teamSelect">' + teamOpts.join('') + '</select>' +
+    '<select class="dept-select" id="roiSelect">' + roiOpts.join('') + '</select>' +
+    (editor ? '<button class="btn btn-sm" id="roiManageBtn" title="Add, rename, recolor or remove ROI drivers">Manage ROI drivers</button>' : '') +
     '<button class="filter-reset" id="filterReset">Reset filters</button>';
   $('filterbar').querySelectorAll('[data-chip]').forEach(el => el.addEventListener('click', () => {
     const k = el.dataset.chip;
@@ -381,9 +501,14 @@ function renderFilters() {
     renderAll(true);
   }));
   $('deptSelect').addEventListener('change', e => { deptFilter = e.target.value; renderAll(true); });
+  $('teamSelect').addEventListener('change', e => { teamFilter = e.target.value; renderAll(true); });
+  $('roiSelect').addEventListener('change', e => { roiFilter = e.target.value; renderAll(true); });
+  if (editor) $('roiManageBtn').addEventListener('click', openRoiManager);
   $('filterReset').addEventListener('click', () => {
     statusFilter = new Set(TIMELINE_STATUSES.map(s => s.key));
     deptFilter = 'all';
+    teamFilter = 'all';
+    roiFilter = 'all';
     renderAll(true);
   });
 }
@@ -391,6 +516,8 @@ function passesFilter(cat, p) {
   if (p.status === 'backlog') return false;
   if (!statusFilter.has(p.status)) return false;
   if (deptFilter !== 'all' && cat.id !== deptFilter) return false;
+  if (teamFilter !== 'all' && (p.team || '') !== teamFilter) return false;
+  if (roiFilter !== 'all' && p.roiPrimary !== roiFilter && !(p.roiSecondary || []).includes(roiFilter)) return false;
   return true;
 }
 
@@ -511,14 +638,14 @@ function renderGantt() {
         let outLabel = '';
         if (!labelInside) {
           if (x1 + 8 + approxLabelW <= scale.total) {
-            outLabel = '<span class="g-barlabel-out" style="left:' + (x1 + 8) + 'px">' + esc(p.name) + '</span>';
+            outLabel = '<span class="g-barlabel-out" style="left:' + (x1 + 8) + 'px">' + roiStarMark(p) + esc(p.name) + '</span>';
           } else {
-            outLabel = '<span class="g-barlabel-out" style="right:' + (scale.total - x0 + 8) + 'px">' + esc(p.name) + '</span>';
+            outLabel = '<span class="g-barlabel-out" style="right:' + (scale.total - x0 + 8) + 'px">' + roiStarMark(p) + esc(p.name) + '</span>';
           }
         }
         barHtml = '<div class="g-bar' + (fadeL ? ' fade-l' : '') + (fadeR ? ' fade-r' : '') + dim + (anim ? ' anim' : '') + '" data-open="' + p.id + '"' +
           ' style="left:' + x0 + 'px;width:' + w + 'px;background:' + s.c + ';animation-delay:' + (rowIdx * 55) + 'ms" title="' + tip + '">' +
-          (labelInside ? '<span class="g-barlabel">' + esc(p.name) + '</span>' : '') + '</div>' + outLabel;
+          (labelInside ? '<span class="g-barlabel">' + roiStarMark(p) + esc(p.name) + '</span>' : '') + '</div>' + outLabel;
         (p.milestones || []).forEach(m => {
           const md = parseDate(m.date);
           if (!md || md < scale.tMin || md > scale.tMax) return;
@@ -526,7 +653,7 @@ function renderGantt() {
         });
       }
       rowIdx++;
-      html += '<div class="g-row"><div class="g-rowlabel" data-open="' + p.id + '" title="' + esc(p.name) + '"><span class="g-rowdot" style="background:' + s.c + '"></span><span class="g-rowname">' + esc(p.name) + '</span></div>' +
+      html += '<div class="g-row"><div class="g-rowlabel" data-open="' + p.id + '" title="' + esc(p.name) + '"><span class="g-rowdot" style="background:' + s.c + '"></span><span class="g-rowname">' + esc(p.name) + '</span>' + roiStarMark(p) + '</div>' +
         '<div class="g-rowlane" data-open="' + p.id + '" style="width:' + scale.total + 'px">' + barHtml + '</div></div>';
     });
 
@@ -569,18 +696,22 @@ function renderList() {
     const rows = (cat.projects || []).filter(p => passesFilter(cat, p));
     total += rows.length;
     const open = openCats.has(cat.id);
+    const dash = '<span style="color:var(--text-dim)">—</span>';
     const body = rows.length
-      ? '<div class="p-cols-head"><span>Project</span><span>Status</span><span>Window</span><span>Stakeholders</span><span>Latest update</span></div>' +
+      ? '<div class="p-cols-head"><span>Project</span><span>Status</span><span>Window</span><span>Team</span><span>Primary ROI</span><span>Stakeholders</span><span>Latest update</span></div>' +
         rows.map(p => {
           const s = stat(p.status);
           const dates = isScheduled(p)
             ? fmtShort(p.startDate) + ' → ' + fmtShort(p.endDate)
             : '<span class="unsch">Unscheduled</span>';
+          const rp = roiById(p.roiPrimary);
           return '<div class="p-row" data-open="' + p.id + '">' +
             '<div class="p-name">' + esc(p.name) + '</div>' +
             '<span class="status-badge" style="color:' + s.c + ';background:' + s.bg + '"><span class="dot"></span>' + s.label + '</span>' +
             '<div class="p-dates">' + dates + '</div>' +
-            '<div class="p-meta">' + (p.stakeholders ? esc(p.stakeholders) : '<span style="color:var(--text-dim)">—</span>') + '</div>' +
+            '<div class="p-meta">' + (p.team ? esc(p.team) : dash) + '</div>' +
+            '<div class="p-roi">' + (rp ? roiPillHtml(rp, true) : dash) + '</div>' +
+            '<div class="p-meta">' + (p.stakeholders ? esc(p.stakeholders) : dash) + '</div>' +
             '<div class="p-summary">' + (p.updateSummary ? esc(p.updateSummary) : '<span style="font-style:italic">No update yet</span>') + '</div>' +
             '</div>';
         }).join('')
@@ -617,7 +748,7 @@ function renderList() {
   $('projectList').querySelectorAll('[data-addproj]').forEach(el => el.addEventListener('click', () =>
     promptModal('Add project', 'Project name', 'Add', name => {
       const cat = working.categories.find(c => c.id === el.dataset.addproj);
-      cat.projects.push({ id: gid('proj'), name, status: 'in-progress', startDate: '', endDate: '', stakeholders: '', updateSummary: '', description: '', milestones: [], comments: [] });
+      cat.projects.push({ id: gid('proj'), name, status: 'in-progress', startDate: '', endDate: '', team: '', roiPrimary: '', roiSecondary: [], stakeholders: '', updateSummary: '', description: '', milestones: [], comments: [] });
       markDirty(); renderAll(true);
     })));
   $('projectList').querySelectorAll('[data-renamecat]').forEach(el => el.addEventListener('click', () => {
@@ -668,6 +799,39 @@ function commitField(p, field, value) {
   markDirty();
   /* refresh background views without rebuilding the panel inputs */
   renderKpis(); renderGantt(); renderList(); renderBacklog(); renderHeaderMeta();
+}
+function teamFieldHtml(p, editor) {
+  if (!editor) return '<div class="p-text' + (p.team ? '' : ' empty') + '">' + (p.team ? esc(p.team) : 'Not provided') + '</div>';
+  const opts = distinctTeams();
+  if (!opts.includes('In House')) opts.unshift('In House');
+  return '<input class="p-input" data-field="team" list="teamDatalist" placeholder="e.g. In House, Vendor: IQ" value="' + esc(p.team) + '" style="margin-bottom:6px">' +
+    '<datalist id="teamDatalist">' + opts.map(t => '<option value="' + esc(t) + '"></option>').join('') + '</datalist>' +
+    '<div class="roi-hint">Type a team or vendor — existing names autocomplete; new ones become filterable.</div>';
+}
+function roiSectionHtml(p, editor) {
+  const drivers = roiList();
+  const primary = roiById(p.roiPrimary);
+  const secondary = (p.roiSecondary || []).map(roiById).filter(Boolean);
+  if (!editor) {
+    if (!drivers.length) return '<div class="p-text empty">No ROI drivers defined.</div>';
+    const primHtml = primary ? roiPillHtml(primary, true) : '<span class="p-text empty" style="padding:0">Not set</span>';
+    return '<div class="roi-mini-label">Primary</div><div class="roi-pill-row">' + primHtml + '</div>' +
+      (secondary.length
+        ? '<div class="roi-mini-label" style="margin-top:12px">Secondary</div><div class="roi-pill-row">' + secondary.map(d => roiPillHtml(d, false)).join('') + '</div>'
+        : '');
+  }
+  if (!drivers.length) return '<div class="roi-hint">No ROI drivers yet. Use “Manage drivers” to add some.</div>';
+  const primSel = '<select class="p-select" id="roiPrimarySelect" style="margin-bottom:14px;width:100%">' +
+    '<option value="">None</option>' +
+    drivers.map(d => '<option value="' + d.id + '"' + (d.id === p.roiPrimary ? ' selected' : '') + '>' + esc(d.name) + '</option>').join('') +
+    '</select>';
+  const choices = drivers.filter(d => d.id !== p.roiPrimary).map(d => {
+    const on = (p.roiSecondary || []).includes(d.id);
+    return '<span class="roi-pill roi-choice' + (on ? ' on' : '') + '" data-roisec="' + d.id + '" style="--rc:' + d.color + '"><span class="roi-star">★</span>' + esc(d.name) + '</span>';
+  }).join('');
+  return '<div class="roi-mini-label">Primary driver</div>' + primSel +
+    '<div class="roi-mini-label">Secondary drivers <span class="roi-hint" style="text-transform:none;letter-spacing:0">(click to toggle)</span></div>' +
+    (choices ? '<div class="roi-choices">' + choices + '</div>' : '<div class="roi-hint">No other drivers available.</div>');
 }
 function renderPanel() {
   const found = findProject(working, panelProjectId);
@@ -726,6 +890,10 @@ function renderPanel() {
           '<div class="df"><label>Target end</label><input type="date" data-datefield="endDate" value="' + esc(p.endDate) + '"></div>' +
           '</div></div>'
         : '') +
+      '<div class="p-section"><div class="p-section-title">Team</div>' + teamFieldHtml(p, editor) + '</div>' +
+      '<div class="p-section"><div class="p-section-title">ROI Drivers' +
+        (editor ? '<button class="roi-manage-link" id="roiManageLink">Manage drivers</button>' : '') +
+        '</div>' + roiSectionHtml(p, editor) + '</div>' +
       '<div class="p-section"><div class="p-section-title">Stakeholders</div>' + textOrInput('stakeholders', 'e.g. CFO, VP Mortgage Servicing, Legal', false) + '</div>' +
       '<div class="p-section"><div class="p-section-title">Update summary</div>' + textOrInput('updateSummary', 'One-line status for executives — what changed since last review', true) + '</div>' +
       '<div class="p-section"><div class="p-section-title">Description</div>' + textOrInput('description', 'What this initiative does, scope, and expected outcome', true) + '</div>' +
@@ -761,6 +929,21 @@ function renderPanel() {
       commitField(p, 'status', e.target.value);
       renderPanel();
     });
+    const roiManageLink = $('roiManageLink');
+    if (roiManageLink) roiManageLink.addEventListener('click', openRoiManager);
+    const roiPrimarySelect = $('roiPrimarySelect');
+    if (roiPrimarySelect) roiPrimarySelect.addEventListener('change', e => {
+      p.roiPrimary = e.target.value;
+      p.roiSecondary = (p.roiSecondary || []).filter(x => x !== p.roiPrimary);
+      markDirty(); renderGantt(); renderList(); renderPanel();
+    });
+    panel.querySelectorAll('[data-roisec]').forEach(el => el.addEventListener('click', () => {
+      const id = el.dataset.roisec;
+      p.roiSecondary = p.roiSecondary || [];
+      if (p.roiSecondary.includes(id)) p.roiSecondary = p.roiSecondary.filter(x => x !== id);
+      else p.roiSecondary.push(id);
+      markDirty(); renderGantt(); renderList(); renderPanel();
+    }));
     $('msAddBtn').addEventListener('click', () => {
       const label = $('msLabel').value.trim();
       if (!label) { toast('Milestone name is required', false); return; }
@@ -825,9 +1008,14 @@ $('panelOverlay').addEventListener('click', () => closePanel());
 $('modalCancel').addEventListener('click', closeModal);
 $('modalOk').addEventListener('click', () => { if (modalCb && modalCb() === false) return; closeModal(); });
 $('modalInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('modalOk').click(); });
+$('roiAddBtn').addEventListener('click', addRoiDriver);
+$('roiNewName').addEventListener('keydown', e => { if (e.key === 'Enter') addRoiDriver(); });
+$('roiDoneBtn').addEventListener('click', closeRoiManager);
+$('roiOverlay').addEventListener('click', e => { if (e.target === $('roiOverlay')) closeRoiManager(); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if ($('modalOverlay').classList.contains('show')) closeModal();
+    else if ($('roiOverlay').classList.contains('show')) closeRoiManager();
     else if (panelProjectId) closePanel();
   }
 });
