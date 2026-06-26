@@ -180,6 +180,7 @@ button{font-family:var(--font)}
 .gantt-legend .li{display:inline-flex;align-items:center;gap:7px}
 .legend-ms{width:8px;height:8px;transform:rotate(45deg);background:#0e1218;border:2px solid rgba(255,255,255,.85);border-radius:1px;display:inline-block}
 .legend-ms.done{background:#fff;border-color:#fff}
+.legend-roistar{color:var(--gold);font-size:11px;line-height:1}
 .legend-today{width:12px;height:2px;background:var(--gold);display:inline-block;box-shadow:0 0 6px rgba(217,179,106,.6)}
 .legend-chip{display:inline-block;width:26px;height:12px;border:1px dashed var(--border-light);border-radius:7px}
 
@@ -199,14 +200,15 @@ button{font-family:var(--font)}
 .icon-btn.danger:hover{background:var(--bg-cancelled);color:var(--c-cancelled);border-color:transparent}
 .cat-body{display:none}
 .cat-block.open .cat-body{display:block}
-.p-row{display:grid;grid-template-columns:minmax(190px,1.4fr) 138px 175px minmax(130px,1fr) minmax(180px,1.6fr);gap:14px;align-items:center;padding:11px 26px 11px 57px;border-top:1px solid rgba(38,46,66,.45);cursor:pointer;transition:background .12s}
+.p-row{display:grid;grid-template-columns:minmax(150px,1.3fr) 120px 140px minmax(95px,.85fr) minmax(120px,1fr) minmax(100px,.9fr) minmax(150px,1.3fr);gap:14px;align-items:center;padding:11px 26px 11px 57px;border-top:1px solid rgba(38,46,66,.45);cursor:pointer;transition:background .12s}
 .p-row:hover{background:var(--surface-hover)}
 .p-name{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .p-dates{font-family:var(--mono);font-size:11.5px;color:var(--text-muted);white-space:nowrap}
 .p-dates .unsch{color:var(--text-dim);font-style:italic}
 .p-meta{font-size:12.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .p-summary{font-size:12.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.p-cols-head{display:grid;grid-template-columns:minmax(190px,1.4fr) 138px 175px minmax(130px,1fr) minmax(180px,1.6fr);gap:14px;padding:8px 26px 8px 57px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);border-top:1px solid rgba(38,46,66,.45)}
+.p-cols-head{display:grid;grid-template-columns:minmax(150px,1.3fr) 120px 140px minmax(95px,.85fr) minmax(120px,1fr) minmax(100px,.9fr) minmax(150px,1.3fr);gap:14px;padding:8px 26px 8px 57px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);border-top:1px solid rgba(38,46,66,.45)}
+.p-roi{min-width:0}
 .status-badge{display:inline-flex;align-items:center;gap:7px;padding:4px 12px;border-radius:16px;font-size:11.5px;font-weight:600;white-space:nowrap;width:fit-content}
 .status-badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 .add-inline{display:flex;align-items:center;gap:8px;padding:11px 26px 13px 57px;color:var(--text-dim);cursor:pointer;font-size:13px;transition:color .12s;border-top:1px solid rgba(38,46,66,.45)}
@@ -301,6 +303,42 @@ button{font-family:var(--font)}
 .toast.show{opacity:1;transform:translateY(0)}
 .toast .ok{color:var(--c-done)}
 .toast .err{color:var(--c-cancelled)}
+
+/* ---------- ROI drivers & team ---------- */
+/* Primary-ROI star marker — colored by the driver, shaped (not a dot) and ringed
+   with a dark shadow so it stays legible on any status-colored bar. */
+.g-roistar{font-size:10px;line-height:1;margin-right:5px;flex-shrink:0;
+  text-shadow:0 0 2px rgba(6,8,13,.9),0 0 1px rgba(6,8,13,.95)}
+.g-rowlabel .g-roistar{margin-right:0;margin-left:6px}
+
+.roi-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:14px;font-size:11.5px;font-weight:500;
+  border:1px solid var(--border-light);color:var(--text-secondary);background:var(--raised);white-space:nowrap;max-width:100%}
+.roi-pill .roi-star{color:var(--rc);font-size:11px;line-height:1;flex-shrink:0}
+.roi-pill.primary{border-color:var(--rc);color:var(--text);font-weight:600}
+.roi-pill.primary .roi-star{filter:drop-shadow(0 0 3px var(--rc))}
+.p-roi .roi-pill{overflow:hidden;text-overflow:ellipsis;display:inline-flex}
+.roi-pill-row{display:flex;flex-wrap:wrap;gap:7px}
+
+.roi-mini-label{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:7px}
+.roi-hint{font-size:11.5px;color:var(--text-dim);font-style:italic;margin-top:2px}
+.roi-manage-link{background:none;border:none;color:var(--gold);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:none;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:0}
+.roi-manage-link:hover{color:var(--gold-bright)}
+.roi-choices{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:6px}
+.roi-choice{cursor:pointer;opacity:.7;transition:all .12s}
+.roi-choice .roi-star{opacity:.5}
+.roi-choice:hover{opacity:1;border-color:var(--rc)}
+.roi-choice.on{opacity:1;border-color:var(--rc);color:var(--text);background:var(--surface-hover)}
+.roi-choice.on .roi-star{opacity:1;filter:drop-shadow(0 0 3px var(--rc))}
+
+/* manager modal */
+.modal.modal-wide{width:520px}
+.roi-manager-list{margin:6px 0 4px;max-height:340px;overflow-y:auto}
+.roi-mrow{display:flex;align-items:center;gap:10px;padding:7px 0}
+.roi-swatch{width:34px;height:34px;flex-shrink:0;border:1px solid var(--border-light);border-radius:9px;cursor:pointer;color:rgba(6,8,13,.85);font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;text-shadow:0 0 2px rgba(255,255,255,.35);transition:transform .1s}
+.roi-swatch:hover{transform:scale(1.07)}
+.roi-name-input{margin-bottom:0!important;flex:1}
+.roi-add-row{display:flex;gap:10px;margin-top:12px;padding-top:14px;border-top:1px solid var(--border)}
+.roi-add-row .modal-input{flex:1}
 
 @media (max-width:820px){
   .header,.container{padding-left:18px;padding-right:18px}
