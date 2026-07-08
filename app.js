@@ -512,13 +512,19 @@ function renderFilters() {
     renderAll(true);
   });
 }
-function passesFilter(cat, p) {
-  if (p.status === 'backlog') return false;
-  if (!statusFilter.has(p.status)) return false;
+/* Department / team / ROI apply across the whole app, including the backlog.
+   Status chips are excluded here — backlog items are always status:'backlog',
+   which TIMELINE_STATUSES never contains, so that check lives only in passesFilter. */
+function passesCrossFilters(cat, p) {
   if (deptFilter !== 'all' && cat.id !== deptFilter) return false;
   if (teamFilter !== 'all' && (p.team || '') !== teamFilter) return false;
   if (roiFilter !== 'all' && p.roiPrimary !== roiFilter && !(p.roiSecondary || []).includes(roiFilter)) return false;
   return true;
+}
+function passesFilter(cat, p) {
+  if (p.status === 'backlog') return false;
+  if (!statusFilter.has(p.status)) return false;
+  return passesCrossFilters(cat, p);
 }
 
 /* ---------------- Gantt time scale ----------------
@@ -766,17 +772,25 @@ function renderList() {
 
 /* ---------------- backlog ---------------- */
 function renderBacklog() {
-  const items = allProjects(working).filter(({ cat, p }) =>
-    p.status === 'backlog' && (deptFilter === 'all' || cat.id === deptFilter));
+  const dash = '<span style="color:var(--text-dim)">\u2014</span>';
+  const items = allProjects(working).filter(({ cat, p }) => p.status === 'backlog' && passesCrossFilters(cat, p));
   $('backlogCount').textContent = items.length;
   $('backlogCard').classList.toggle('open', backlogOpen);
+  const filtering = deptFilter !== 'all' || teamFilter !== 'all' || roiFilter !== 'all';
   $('backlogBody').innerHTML = items.length
-    ? items.map(({ cat, p }) =>
-        '<div class="b-row" data-open="' + p.id + '">' +
-        '<span class="b-dept">' + esc(cat.name) + '</span>' +
-        '<span class="b-name">' + esc(p.name) + '</span>' +
-        '<span class="b-summary">' + (p.description ? esc(p.description) : (p.updateSummary ? esc(p.updateSummary) : '<span style="font-style:italic">No description</span>')) + '</span></div>').join('')
-    : '<div class="list-empty" style="padding:18px 26px">Nothing in the backlog. Set a project\u2019s status to Backlog to park it here.</div>';
+    ? '<div class="b-cols-head"><span>Department</span><span>Project</span><span>Team</span><span>Primary ROI</span><span>Description</span></div>' +
+      items.map(({ cat, p }) => {
+        const rp = roiById(p.roiPrimary);
+        return '<div class="b-row" data-open="' + p.id + '">' +
+          '<span class="b-dept">' + esc(cat.name) + '</span>' +
+          '<span class="b-name">' + esc(p.name) + '</span>' +
+          '<span class="b-team">' + (p.team ? esc(p.team) : dash) + '</span>' +
+          '<span class="b-roi">' + (rp ? roiPillHtml(rp, true) : dash) + '</span>' +
+          '<span class="b-summary">' + (p.description ? esc(p.description) : (p.updateSummary ? esc(p.updateSummary) : '<span style="font-style:italic">No description</span>')) + '</span></div>';
+      }).join('')
+    : '<div class="list-empty" style="padding:18px 26px">' +
+      (filtering ? 'Nothing in the backlog matches the current filters.' : 'Nothing in the backlog. Set a project\u2019s status to Backlog to park it here.') +
+      '</div>';
   $('backlogBody').querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', () => openPanel(el.dataset.open)));
 }
 
